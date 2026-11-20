@@ -1,69 +1,45 @@
-# Taller Data Engineer Junior Advanced — ETL con PySpark
+# Taller Data Engineer - PySpark
 
-Proyecto práctico de ingeniería de datos local, construido sobre las seis hojas del Excel del taller de RIWI. Python + PySpark + Spark SQL/DataFrames, sin nube ni Delta Lake.
+Este es mi ejercicio de procesamiento de ventas de una tienda usando **Python y PySpark**. Trabajé con los datos del Excel del taller, que pasé a CSV y JSONL para poder leerlos con Spark.
 
-## Funcionalidades
+## Qué hace el programa
 
-- Importación de CSV históricos y JSON Lines incrementales.
-- Limpieza de tipos y validación de claves, integridad referencial, fechas, precios, cantidades y descuentos.
-- Normalización documentada del error tipográfico `deliverd` → `delivered`.
-- Cuarentena trazable de filas inválidas, huérfanas y duplicadas en `output/quarantine/`.
-- Idempotencia: combina histórico + incremental y selecciona una única fila por `order_id`, priorizando el mayor `updated_at`; detalle único por `line_id`.
-- Ventas netas por **mes, país, canal y categoría**, con fórmula `quantity * unit_price * (1 - discount_pct)`.
-- Dos controles automáticos: reconciliación de totales y granularidad de líneas únicas. También comprueba importes negativos/nulos.
-- Resultados Parquet y evidencia de QA en JSON.
+1. Lee clientes, productos, pedidos y detalles.
+2. Agrega el lote incremental de pedidos.
+3. Cambia los tipos de datos y revisa errores como cantidades negativas, precios inválidos y registros que no tienen una referencia válida.
+4. Separa esos registros en `output/errores/` para revisarlos.
+5. Une las tablas y calcula `quantity * unit_price * (1 - discount_pct)`.
+6. Agrupa las ventas por mes, país, canal y categoría.
+7. Comprueba que el total del detalle sea igual al total del resumen y que no haya líneas duplicadas.
+8. Guarda los resultados en formato Parquet dentro de `output/`.
 
-## Requisitos
+## Cómo ejecutarlo
 
-Python 3.12, JDK 17/21/25 según la guía y PySpark 4.3.0. Comprueba `java -version`.
-
-```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python src/pipeline.py
-```
-
-En Windows: `py -3.12 -m venv .venv`, `.venv\\Scripts\\activate`, luego instalación y ejecución equivalentes.
-
-Para comparar resultados sin lote incremental:
+Necesitas Python 3.12, Java y PySpark. Desde la carpeta del proyecto:
 
 ```bash
-python src/pipeline.py --no-incremental --output-dir output/historical_only
+python -m venv .venv
 ```
 
-## Estructura
+En Windows, activa con `.venv\Scripts\activate`. En Linux, con `source .venv/bin/activate`.
 
-```text
-├── datos/
-│   ├── customers.csv, products.csv, orders.csv, order_items.csv
-│   └── incremental/orders_incremental.jsonl, order_items_incremental.jsonl
-├── src/pipeline.py
-├── tests/test_pipeline.py
-├── docs/decisiones.md
-├── requirements.txt
-└── output/   # generado al ejecutar; ignorado por Git
+```bash
+pip install -r requirements.txt
+python main.py
 ```
 
-El Excel original contenía todo el material de datos; se exportaron sus seis hojas a CSV/JSONL para ejecutar Spark sin el ZIP citado en la consigna, que no estaba adjunto.
+## Datos
 
-## Salidas
+La carpeta `datos/` tiene los cuatro CSV históricos y los dos JSONL incrementales. No necesitas convertir el Excel otra vez.
 
-| Ruta | Contenido |
-|---|---|
-| `output/sales_detail/` | Una fila por línea válida de pedido comercializable |
-| `output/monthly_sales/` | Ventas netas agregadas por mes, país, canal y categoría |
-| `output/orders_current/` | Última versión por pedido |
-| `output/items_current/` | Detalle vigente sin duplicados |
-| `output/quarantine/` | Filas rechazadas separadas por incidencia |
-| `output/qa_report.json` | Conciliación, líneas, duplicados, importes inválidos y rechazos |
+## Cómo traté los errores
 
-### Regla comercial
+- Si hay un pedido repetido, conservo el que tenga `updated_at` más reciente.
+- Si una cantidad es negativa, un descuento sale del rango 0 a 1, o un precio no es válido, separo el registro; no le invento un valor.
+- Si un pedido no tiene cliente, o un detalle no tiene pedido o producto, también lo separo.
+- Corregí `deliverd` por `delivered` porque era un error de escritura identificable.
+- Consideré ventas los pedidos `shipped` y `delivered`; los pendientes y cancelados no se suman.
 
-Se reconocen ventas para estados `delivered` y `shipped`; `pending` y `cancelled` se conservan como pedidos, pero no generan ventas. Se usa precio de producto del catálogo actual (no existe precio histórico de línea); esta limitación se documenta en `docs/decisiones.md`.
+La salida se sobrescribe en cada ejecución. Por eso procesar otra vez el mismo lote incremental no aumenta los pedidos artificialmente. Como el detalle de pedidos no tiene el precio de cada venta, tomé el precio de la tabla de productos.
 
-### Reprocesamiento
-
-La entrada es inmutable y cada ejecución recalcula salidas en modo `overwrite`: reprocesar el mismo lote no suma pedidos de nuevo. Los resultados son reproducibles con el mismo Excel/CSV/JSONL. Si se actualiza la fuente, el nuevo `updated_at` prevalece por pedido.
-
-> Nota: la escritura de Parquet es una operación local, no un `MERGE` transaccional; para producción usar staging/rename atómico o un formato transaccional.
+**Nota:** Este es un proyecto local para practicar, no un pipeline de producción.
