@@ -43,3 +43,4 @@ La carpeta `datos/` tiene los cuatro CSV históricos y los dos JSONL incremental
 La salida se sobrescribe en cada ejecución. Por eso procesar otra vez el mismo lote incremental no aumenta los pedidos artificialmente. Como el detalle de pedidos no tiene el precio de cada venta, tomé el precio de la tabla de productos.
 
 **Nota:** Este es un proyecto local para practicar, no un pipeline de producción.
+# taller-data-engineer
